@@ -1,11 +1,13 @@
 import React, { useState } from 'react'
 import axiosInstance from '../../Services/Interceptors/userInterceptor.js';
-import Swal from 'sweetalert2'; 
+import Swal from 'sweetalert2';
+import { validateLoginForm } from '../../Services/validation.js';
 import { useNavigate } from 'react-router-dom';
 
 function Login() {
 
-  const navigate=useNavigate()
+  const navigate = useNavigate()
+  const[errors, setErrors] = useState({})
   const [formData, setFormData] = useState({
     email: '',
     password: ''
@@ -18,7 +20,10 @@ function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      await validateLoginForm.validate(formData, { abortEarly: false })
+      setErrors({})
       const response = await axiosInstance.post('/user-login', formData);
+      setErrors({})
       if (response.data.success) {
         localStorage.setItem('token', response.data.token);
         localStorage.setItem('user', JSON.stringify(response.data.user));
@@ -28,8 +33,12 @@ function Login() {
           text: 'You have successfully logged in!',
           confirmButtonText: 'OK'
         }).then(() => {
-          navigate('/home');
+          navigate('/');
         });
+        setFormData({
+          email: '',
+          password:''
+        })
       } else {
         Swal.fire({
           icon: 'error',
@@ -37,14 +46,21 @@ function Login() {
           text: response.data.message || 'Invalid email or password!',
           confirmButtonText: 'Try Again'
         });
+        setFormData({
+          email: '',
+          password:''
+        })
       }
-    } catch (error) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.response?.data?.message || 'Something went wrong! Please try again.',
-        confirmButtonText: 'OK'
+    } catch (validationErrors) {
+      const formattedErrors = {};
+      validationErrors.inner.forEach((error) => {
+        formattedErrors[error.path] = error.message;
       });
+      setErrors(formattedErrors);
+      setFormData({
+        email: '',
+        password:''
+      })
     }
   };
 
@@ -63,9 +79,10 @@ function Login() {
               name="email"
               value={formData.email}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
+              className={`w-full px-3 py-2 border ${errors.email ? 'border-red-500' : 'border-gray-300'
+              } rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
             />
+             {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
           </div>
           <div className="mb-6">
             <label htmlFor="password" className="block text-gray-700 text-sm font-bold mb-2">
@@ -77,9 +94,10 @@ function Login() {
               name="password"
               value={formData.password}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
+              className={`w-full px-3 py-2 border ${errors.password ? 'border-red-500' : 'border-gray-300'
+              } rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500`}
             />
+             {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
           </div>
           <button
             type="submit"
@@ -88,6 +106,15 @@ function Login() {
             Log In
           </button>
         </form>
+        <div className="mt-4 text-center">
+          <p className="text-sm text-gray-700">Don't have an account?</p>
+          <button
+            className="text-blue-500 hover:underline"
+            onClick={() => navigate('/user-signup')}
+          >
+            Signup here
+          </button>
+        </div>
       </div>
     </div>
   );
