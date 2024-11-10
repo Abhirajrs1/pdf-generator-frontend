@@ -1,8 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import { Document, Page, pdfjs } from 'react-pdf';
+import { PDFDocument } from 'pdf-lib';
 import axiosInstance from '../Services/Interceptors/userInterceptor.js';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
-import { FaCheck, FaEye, FaFilePdf,FaTrashAlt } from 'react-icons/fa';
+import { FaCheck, FaEye, FaFilePdf, FaTrashAlt } from 'react-icons/fa';
+
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 function Home() {
   const [user, setUser] = useState(JSON.parse(localStorage.getItem('user')) || null);
@@ -10,7 +14,7 @@ function Home() {
   const [selectedPdf, setSelectedPdf] = useState(null);
   const [selectedPages, setSelectedPages] = useState([]);
   const [numPages, setNumPages] = useState(0);
-  const [previewMode, setPreviewMode] = useState(false);
+  const [pageScale, setPageScale] = useState(1.0);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -23,21 +27,15 @@ function Home() {
             setUser(response.data.user);
             fetchPdf();
           } else {
-            setUser(null);
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-            navigate('/user-login');
+            handleLogout();
           }
         } catch (error) {
-          setUser(null);
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          navigate('/user-login');
+          handleLogout();
         }
       }
     };
     checkAuthenticated();
-  }, [navigate]);
+  }, []);
 
   const fetchPdf = async () => {
     try {
@@ -56,15 +54,16 @@ function Home() {
       input: 'file',
       inputAttributes: {
         accept: 'application/pdf',
-        'aria-label': 'Upload your PDF',
-      },
+        'aria-label': 'Upload your PDF'
+      }
     });
+
     if (file) {
       const formData = new FormData();
       formData.append('pdf', file);
       try {
         const response = await axiosInstance.post('/upload-pdf', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
+          headers: { 'Content-Type': 'multipart/form-data' }
         });
         if (response.data.success) {
           Swal.fire('Uploaded!', 'Your PDF has been uploaded.', 'success');
@@ -78,95 +77,17 @@ function Home() {
 
   const handleViewPdf = (pdf) => {
     setSelectedPdf(pdf);
-    setNumPages(pdf.pages);
     setSelectedPages([]);
-    setPreviewMode(false);
   };
-
 
   const handlePageSelect = (pageNumber) => {
     setSelectedPages(prev => {
-      const newSelection = prev.includes(pageNumber)
-        ? prev.filter(page => page !== pageNumber)
-        : [...prev, pageNumber].sort((a, b) => a - b);
-      return newSelection;
-    });
-  };
-
-  const handlePreviewSelected = () => {
-    if (selectedPages.length === 0) {
-      Swal.fire('Warning', 'Please select at least one page to preview', 'warning');
-      return;
-    }
-    setPreviewMode(true);
-  };
-
-  const handleDeletePdf = async (pdfId) => {
-    const result = await Swal.fire({
-      title: 'Are you sure?',
-      text: "You won't be able to revert this!",
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonText: 'Yes, delete it!',
-      cancelButtonText: 'No, cancel!',
-    });
-
-    if (result.isConfirmed) {
-      try {
-        const response = await axiosInstance.delete(`/delete-pdf/${pdfId}`);
-        if (response.data.success) {
-          Swal.fire('Deleted!', 'Your PDF has been deleted.', 'success');
-          fetchPdf(); 
-        }
-      } catch (error) {
-        Swal.fire('Error!', 'Failed to delete PDF.', 'error');
+      if (prev.includes(pageNumber)) {
+        return prev.filter(page => page !== pageNumber);
+      } else {
+        return [...prev, pageNumber].sort((a, b) => a - b);
       }
-    }
-  };
-
-
-  const handleRegeneratePdf = async () => {
-    if (!selectedPdf || selectedPages.length === 0) {
-      Swal.fire('Error!', 'Please select at least one page to regenerate', 'error');
-      return;
-    }
-
-    try {
-      Swal.fire({
-        title: 'Generating PDF...',
-        text: 'Please wait while we process your request',
-        allowOutsideClick: false,
-        didOpen: () => {
-          Swal.showLoading();
-        }
-      });
-      const response = await axiosInstance.post('/regenerate-pdf', {
-        pdf: selectedPdf._id,
-        selectedPages: selectedPages
-      });
-      if (response.data.success) {
-        Swal.fire({
-          title: 'Success!',
-          text: 'PDF has been regenerated with selected pages',
-          icon: 'success',
-          showConfirmButton: true,
-          confirmButtonText: 'Download PDF',
-          showCancelButton: true,
-          cancelButtonText: 'Close'
-        }).then((result) => {
-          if (result.isConfirmed && response.data.pdfUrl) {
-            window.open(response.data.pdfUrl, '_blank');
-          }
-        });
-        fetchPdf();
-      }
-    } catch (error) {
-      Swal.fire('Error!', 'Failed to regenerate PDF.', 'error');
-    }
-  };
-
-  const handleClosePdf = () => {
-    setSelectedPdf(null);
+    });
   };
 
   const handleLogout = async () => {
@@ -181,7 +102,7 @@ function Home() {
           text: response.data.message,
           icon: 'success',
           timer: 5000,
-          position: 'top-center',
+          position: 'top-center'
         });
         navigate('/user-login');
       }
@@ -191,9 +112,76 @@ function Home() {
         text: 'Logout failed!',
         icon: 'error',
         timer: 3000,
-        position: 'top-center',
+        position: 'top-center'
       });
     }
+  };
+
+  const handleRegeneratePdf = async () => {
+    if (selectedPages.length === 0) {
+      Swal.fire({
+        title: 'Error!',
+        text: 'Please select at least one page to download.',
+        icon: 'error'
+      });
+      return;
+    }
+  
+    try {
+      Swal.fire({
+        title: 'Generating PDF...',
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+  
+      const pdfBytes = Uint8Array.from(atob(selectedPdf.base64), c => c.charCodeAt(0));
+  
+      const sourcePdfDoc = await PDFDocument.load(pdfBytes);
+  
+      const newPdfDoc = await PDFDocument.create();
+  
+      for (const pageNumber of selectedPages) {
+        const [copiedPage] = await newPdfDoc.copyPages(sourcePdfDoc, [pageNumber - 1]);
+        newPdfDoc.addPage(copiedPage);
+      }
+  
+      const newPdfBytes = await newPdfDoc.save();
+  
+      const blob = new Blob([newPdfBytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+  
+      const link = document.createElement('a');
+      link.href = url;
+  
+      link.download = selectedPdf && selectedPdf.name 
+        ? `${selectedPdf.name.replace('.pdf', '')}_selected_pages.pdf`
+        : 'selected_pages.pdf'; 
+      link.click();
+  
+      URL.revokeObjectURL(url);
+      Swal.fire({
+        title: 'Success!',
+        text: 'PDF generated and downloaded successfully',
+        icon: 'success',
+        timer: 2000
+      });
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      Swal.fire({
+        title: 'Error!',
+        text: 'Failed to generate PDF',
+        icon: 'error'
+      });
+    }
+  };
+  
+  
+  
+
+  const onDocumentLoadSuccess = ({ numPages }) => {
+    setNumPages(numPages);
   };
 
   return (
@@ -235,13 +223,17 @@ function Home() {
                 <span className="text-sm text-gray-500">{pdf.pages} pages</span>
               </div>
               <div className="relative h-40 bg-gray-100 rounded mb-2">
-                <iframe
-                  src={`data:application/pdf;base64,${pdf.base64}`}
-                  title={pdf.name}
-                  width="100%"
-                  height="150px"
-                  className="border-2 border-gray-300 rounded"
-                />
+                <Document
+                  file={`data:application/pdf;base64,${pdf.base64}`}
+                  className="h-full"
+                >
+                  <Page 
+                    pageNumber={1} 
+                    width={200}
+                    renderTextLayer={false}
+                    renderAnnotationLayer={false}
+                  />
+                </Document>
                 <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-30 transition-all duration-300 flex items-center justify-center">
                   <button
                     onClick={() => handleViewPdf(pdf)}
@@ -249,12 +241,6 @@ function Home() {
                   >
                     <FaEye className="inline-block mr-2" /> View PDF
                   </button>
-                  {/* <button
-                onClick={() => handleDeletePdf(pdf._id)}
-                className="absolute top-0 right-0 mb-3 ml-2 bg-red-500 hover:bg-red-600 text-white font-bold p-2 rounded-full transition duration-300"
-              >
-                <FaTrashAlt />
-              </button> */}
                 </div>
               </div>
             </div>
@@ -267,62 +253,86 @@ function Home() {
               <div className="p-4">
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-2xl font-bold">Selected PDF: {selectedPdf.name}</h2>
-                  <button
-                    onClick={() => setSelectedPdf(null)}
-                    className="text-gray-500 hover:text-gray-700"
-                  >
-                    ✕
-                  </button>
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                      <label className="text-sm">Zoom:</label>
+                      <select 
+                        value={pageScale} 
+                        onChange={(e) => setPageScale(parseFloat(e.target.value))}
+                        className="border rounded p-1"
+                      >
+                        <option value={0.5}>50%</option>
+                        <option value={0.75}>75%</option>
+                        <option value={1.0}>100%</option>
+                        <option value={1.25}>125%</option>
+                        <option value={1.5}>150%</option>
+                      </select>
+                    </div>
+                    <button
+                      onClick={() => setSelectedPdf(null)}
+                      className="text-gray-500 hover:text-gray-700"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="md:col-span-1 bg-gray-50 p-4 rounded">
                     <h3 className="font-bold mb-2">Select Pages:</h3>
-                    <div className="flex flex-wrap">
+                    <div className="max-h-96 overflow-y-auto">
                       {Array.from({ length: numPages }, (_, index) => (
-                        <div
+                        <label 
                           key={index}
-                          onClick={() => handlePageSelect(index + 1)}
-                          className={`cursor-pointer p-2 border m-1 rounded transition duration-300 ${selectedPages.includes(index + 1)
-                              ? 'bg-blue-500 text-white border-blue-700 shadow-lg' 
-                              : 'bg-gray-200 hover:bg-gray-300 border-gray-400' 
-                            }`}
+                          className="flex items-center space-x-2 p-2 hover:bg-gray-100 cursor-pointer"
                         >
-                          Page {index + 1}
-                        </div>
+                          <input
+                            type="checkbox"
+                            checked={selectedPages.includes(index + 1)}
+                            onChange={() => handlePageSelect(index + 1)}
+                            className="form-checkbox h-4 w-4 text-blue-600"
+                          />
+                          <span>Page {index + 1}</span>
+                        </label>
                       ))}
                     </div>
 
-
                     <div className="mt-4 space-y-2">
                       <button
-                        onClick={handlePreviewSelected}
-                        className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition duration-300"
-                        disabled={selectedPages.length === 0}
-                      >
-                        Preview Selected
-                      </button>
-                      <button
                         onClick={handleRegeneratePdf}
-                        className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded transition duration-300"
+                        className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded transition duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                         disabled={selectedPages.length === 0}
                       >
                         <FaFilePdf className="inline-block mr-2" />
                         Generate New PDF
                       </button>
-
                     </div>
                   </div>
 
-                  <div className="md:col-span-3">
-                    <iframe
-                      src={`data:application/pdf;base64,${selectedPdf.base64}${previewMode && selectedPages.length > 0
-                          ? '#page=' + selectedPages.join(',')
-                          : ''
-                        }`}
-                      title={selectedPdf.name}
-                      className="w-full h-[600px] border-2 border-gray-200 rounded"
-                    />
+                  <div className="md:col-span-3 overflow-y-auto max-h-[700px]">
+                    <Document
+                      file={`data:application/pdf;base64,${selectedPdf.base64}`}
+                      onLoadSuccess={onDocumentLoadSuccess}
+                      className="flex flex-col items-center"
+                    >
+                      {Array.from({ length: numPages }, (_, index) => (
+                        <div 
+                          key={index}
+                          className={`mb-4 p-2 ${
+                            selectedPages.includes(index + 1) 
+                              ? 'ring-2 ring-blue-500 rounded'
+                              : ''
+                          }`}
+                        >
+                          <Page
+                            pageNumber={index + 1}
+                            scale={pageScale}
+                            renderTextLayer={false}
+                            renderAnnotationLayer={false}
+                          />
+                        </div>
+                      ))}
+                    </Document>
                   </div>
                 </div>
               </div>

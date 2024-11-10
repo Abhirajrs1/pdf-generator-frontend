@@ -25,6 +25,7 @@ function Signup() {
       setErrors({});
       const response = await axiosInstance.post('/user-signup', formData)
       setErrors({});
+      console.log(response.data.message,"MESAGE")
       if (response.data.success) {
         Swal.fire({
           title: 'Success!',
