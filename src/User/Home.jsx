@@ -59,6 +59,14 @@ function Home() {
     });
 
     if (file) {
+      if (file.type !== 'application/pdf') {
+        Swal.fire({
+          title: 'Error!',
+          text: 'Only PDF files are allowed.',
+          icon: 'error'
+        });
+        return;
+      }
       const formData = new FormData();
       formData.append('pdf', file);
       try {
